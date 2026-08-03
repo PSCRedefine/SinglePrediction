@@ -1,6 +1,6 @@
 # Cognitive Shorts Recommendation System
 
-这是一个课程项目级、端到端的“单条用户—视频互动预测”系统：原始 CSV 经过特征处理，四种分类模型在同一验证集上比较，最佳模型由 FastAPI 提供预测服务，Streamlit 页面负责交互和展示。
+这是一个端到端的“单条用户—视频互动预测”系统：原始 CSV 经过特征处理，四种分类模型在同一验证集上比较，最佳模型由 FastAPI 提供预测服务，Streamlit 页面负责交互和展示。
 
 ![Single Prediction 目标界面](image/single.png)
 
