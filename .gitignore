@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+
+# Editors / operating systems
+.DS_Store
+.idea/
+.vscode/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+
+# Generated data and model artifacts
+data/processed_interactions.csv
+models/*
+!models/.gitkeep
+
+# The raw interaction file is 139 MB, above GitHub's 100 MB file limit.
+# Keep the local copy; distribute it separately or track it with Git LFS.
+data/interactions.csv
+
+# Logs
+*.log
