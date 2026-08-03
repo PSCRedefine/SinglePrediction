@@ -4,7 +4,7 @@
 
 ![Single Prediction 目标界面](image/single.png)
 
-## 先像上课一样理解项目
+## 理解项目
 
 ### 1. 我们到底在预测什么？
 
