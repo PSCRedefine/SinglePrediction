@@ -52,10 +52,8 @@ src/single_prediction/
   api.py                      FastAPI 服务
 scripts/                       便捷命令入口
 tests/                         基础自动测试
-docs/PROJECT_REVIEW.md         原项目缺口和数据审查
 data/                          原始数据与生成的训练表
 models/                        生成的模型和元数据（不提交）
-monitoring/                    二期监控占位
 ```
 
 ## 从零运行
@@ -135,5 +133,3 @@ git status
 git check-ignore -v data/interactions.csv models/best_model.joblib .env
 git diff --check
 ```
-
-更完整的原始审查记录见 [docs/PROJECT_REVIEW.md](docs/PROJECT_REVIEW.md)。
