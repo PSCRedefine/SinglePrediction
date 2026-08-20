@@ -80,6 +80,13 @@ def validate_inputs(user_id: str, video_id: str) -> list[str]:
 st.title("📱 Cognitive Shorts Recommendation System")
 st.caption("Predict the probability that a user actively engages with a video")
 
+# A shareable demo link. `?demo=1` fills a valid request and predicts it;
+# `?demo=invalid` fills a malformed identifier so the validation path renders.
+# Both exist so the README screenshots are reproducible rather than hand-staged.
+demo = st.query_params.get("demo")
+demo_user = "bad_user" if demo == "invalid" else "user_000001"
+demo_video = "0000001" if demo == "invalid" else "video_0000001"
+
 health = call_api("health")
 with st.sidebar:
     st.header("🎛️ Controls")
@@ -100,11 +107,11 @@ with st.sidebar:
 
 if page == "Single Prediction":
     st.header("🎯 Single Prediction")
-    left, right = st.columns([2, 1])
+    left, right = st.columns([3, 2])
     with left:
         st.subheader("Input Parameters")
-        user_id = st.text_input("User ID", value="user_000001")
-        video_id = st.text_input("Video ID", value="video_0000001")
+        user_id = st.text_input("User ID", value=demo_user)
+        video_id = st.text_input("Video ID", value=demo_video)
         watch_time = st.slider("Watch Time (seconds)", 0.0, 180.0, 45.0, 1.0)
         hour_of_day = st.selectbox("Hour of Day", list(range(24)), index=14)
         st.caption(
@@ -115,7 +122,10 @@ if page == "Single Prediction":
 
     with right:
         st.subheader("Prediction")
-        if st.button("🚀 Predict", type="primary", use_container_width=True):
+        autorun = demo in {"1", "invalid"} and not st.session_state.get("demo_done")
+        if autorun:
+            st.session_state.demo_done = True
+        if st.button("🚀 Predict", type="primary", use_container_width=True) or autorun:
             problems = validate_inputs(user_id, video_id)
             if problems:
                 for problem in problems:
@@ -153,7 +163,7 @@ if page == "Single Prediction":
                     )
                     gauge.update_layout(height=300, margin=dict(l=20, r=20, t=60, b=20))
                     st.plotly_chart(gauge, use_container_width=True)
-                    a, b, c = st.columns(3)
+                    a, b, c = st.columns(3)  # widened by the [3, 2] split above
                     a.metric("Probability", f"{probability:.3f}")
                     b.metric("Confidence", response["confidence"])
                     c.metric("Response Time", f"{response['response_time_ms']:.1f} ms")
