@@ -1,0 +1,128 @@
+# Monitoring configuration for the engagement prediction service.
+#
+# Thresholds are derived from the training run, not guessed. Every baseline
+# below is copied from models/model_metadata.json and reports/training_report.json,
+# and scripts/check_drift.py compares live traffic against them.
+#
+# The ordering is deliberate: the checks that catch real failures fastest come
+# first, and calibration drift is included because nothing else will surface it.
+
+service:
+  name: cognitive-shorts-single-prediction
+  version: "1.0.0"
+  endpoints:
+    health: /health
+    predict: /predict
+
+# ---------------------------------------------------------------------------
+# 1. Service health. Standard for any HTTP service.
+# ---------------------------------------------------------------------------
+service_health:
+  probe_interval_seconds: 15
+  readiness_condition: "status == healthy"
+  alerts:
+    - name: error_rate
+      expression: "5xx_rate > 0.01"
+      window: 5m
+      severity: critical
+    - name: latency_p95
+      expression: "predict_p95_ms > 50"
+      window: 5m
+      severity: warning
+    - name: not_ready
+      expression: "health.status != 'healthy'"
+      window: 2m
+      severity: critical
+
+# ---------------------------------------------------------------------------
+# 2. Request-shape drift. Usually the first thing to break, and rarely the
+#    model's fault: an upstream identifier convention changes and every lookup
+#    starts missing.
+# ---------------------------------------------------------------------------
+request_health:
+  alerts:
+    - name: unknown_identifier_rate
+      expression: "404_rate > 0.05"
+      window: 15m
+      severity: warning
+      note: "Usually an upstream id-format change or a stale feature snapshot."
+    - name: validation_failure_rate
+      expression: "422_rate > 0.02"
+      window: 15m
+      severity: warning
+
+# ---------------------------------------------------------------------------
+# 3. Input drift. Baselines are the training distribution of the two features
+#    the model actually uses.
+# ---------------------------------------------------------------------------
+input_drift:
+  method: population_stability_index
+  window: 24h
+  thresholds:
+    warning: 0.10        # conventional PSI bands
+    critical: 0.25
+  features:
+    - name: watch_time_seconds
+      baseline_mean: 31.94
+      baseline_p50: 24.0
+      baseline_p95: 92.0
+    - name: watch_ratio
+      baseline_mean: 0.5029
+      baseline_p50: 0.50
+      baseline_p95: 0.98
+
+# ---------------------------------------------------------------------------
+# 4. Output drift. Cheap to compute, needs no labels, and catches a surprising
+#    share of incidents.
+# ---------------------------------------------------------------------------
+output_drift:
+  window: 24h
+  baseline_mean_probability: 0.2779      # equals the training base rate
+  baseline_distinct_values: 8            # isotonic calibration is a step function
+  alerts:
+    - name: mean_probability_shift
+      expression: "abs(mean_probability - 0.2779) > 0.05"
+      severity: warning
+    - name: flag_rate_shift
+      expression: "abs(flag_rate - 0.239) > 0.10"
+      severity: warning
+      note: "flag_rate at the recommended threshold of 0.3812"
+
+# ---------------------------------------------------------------------------
+# 5. Calibration drift. The check that is normally missing.
+#
+#    Discrimination degrades slowly; calibration degrades quickly. A model with
+#    an acceptable AUC and an 8-point probability bias silently invalidates
+#    every threshold-based consumer, and no alert above would fire.
+# ---------------------------------------------------------------------------
+calibration_drift:
+  requires_labels: true
+  label_delay: 7d              # attribution window before an outcome is known
+  sample_rate: 0.05            # 5% of predictions are logged for later scoring
+  window: 7d
+  baselines:
+    brier: 0.19694
+    ece: 0.00353
+    roc_auc: 0.5796
+  alerts:
+    - name: brier_degradation
+      expression: "brier > 0.2166"        # baseline + 10%
+      severity: warning
+    - name: ece_degradation
+      expression: "ece > 0.02"
+      severity: warning
+    - name: discrimination_collapse
+      expression: "roc_auc < 0.55"
+      severity: critical
+      note: "The honest ceiling on this dataset is ~0.58; below 0.55 the model is near useless."
+
+# ---------------------------------------------------------------------------
+# 6. Retraining policy.
+# ---------------------------------------------------------------------------
+retraining:
+  schedule: weekly
+  gate:
+    - "pytest must pass"
+    - "new validation ROC-AUC must not be more than one standard error below the incumbent"
+    - "feature selection must be re-run; a change in the kept set requires review"
+  rollout: "shadow -> 10% canary -> full, with rollback by repointing the artefact mount"

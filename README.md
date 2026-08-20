@@ -1,135 +1,342 @@
-# Cognitive Shorts Recommendation System
+# Cognitive Shorts: Single Prediction
 
-这是一个端到端的“单条用户—视频互动预测”系统：原始 CSV 经过特征处理，四种分类模型在同一验证集上比较，最佳模型由 FastAPI 提供预测服务，Streamlit 页面负责交互和展示。
+An end-to-end engagement prediction system for short-video interactions. Raw
+interaction logs are processed offline into a leakage-safe feature table, four
+candidate models are compared against a cost-aware statistical decision rule, and
+the selected model is served through a FastAPI service with a Streamlit front
+end.
 
-![Single Prediction 目标界面](image/single.png)
+The headline result is a negative one, and it is the most useful thing in the
+repository: **on this dataset only watch behaviour predicts engagement.**
+Twenty-three of twenty-five candidate features are statistically indistinguishable
+from noise, and any honest model is bounded at roughly 0.58–0.60 ROC-AUC. The
+project is built to demonstrate that claim rather than assert it.
 
-## 理解项目
+---
 
-### 1. 我们到底在预测什么？
+## Contents
 
-一条样本代表某个用户观看某个视频。标签 `target_engaged=1` 表示该次观看发生过至少一种主动互动：点赞、分享、评论、关注创作者或重播；否则为 0。接口返回的是发生主动互动的概率，而不是直接复用数据中的 `engagement_score`。
+- [Results](#results)
+- [Pipeline](#pipeline)
+- [Feature selection](#feature-selection)
+- [Model selection](#model-selection)
+- [The operating point](#the-operating-point)
+- [Data and label definition](#data-and-label-definition)
+- [Interface](#interface)
+- [Repository layout](#repository-layout)
+- [Quick start](#quick-start)
+- [Verification](#verification)
+- [Limitations](#limitations)
+- [References](#references)
 
-### 2. 三张原始表各做什么？
+---
 
-- `users.csv`：25,000 个用户的画像和历史统计。
-- `videos.csv`：35,000 个视频的内容与累计统计。
-- `interactions.csv`：500,000 次观看流水，也是标签来源。
+## Results
 
-离线阶段把交互与用户、视频快照连接，得到模型能读的 `processed_interactions.csv`。线上阶段只接收 `user_id`、`video_id`、`watch_time` 和 `hour_of_day`，后端再从用户/视频快照补齐同一套特征。
+Measured on the latest 15% of the log by time, held out until the final report.
 
-### 3. 数据如何走完整条链路？
+| Metric | Value | Note |
+|---|---:|---|
+| ROC-AUC | **0.5796** | against a ceiling of roughly 0.60 for this data |
+| PR-AUC | 0.3267 | base rate 0.2807 |
+| Brier | 0.1969 | after isotonic calibration |
+| ECE | 0.0035 | calibration error, from 0.0273 before calibration |
+| Features | **2** | selected from 25 candidates by measurement |
+| Artefact | 0.002 MB | 1,958x smaller than the largest candidate |
+| Recommended threshold | 0.3812 | flags 23.9% of traffic at **1.40x lift** |
+
+The model is small, calibrated, and honest about a weak signal. That combination
+is the deliverable.
+
+---
+
+## Pipeline
 
 ```text
-users.csv + videos.csv + interactions.csv
-                    │
-                    ▼
-       processed_interactions.csv
-                    │
-                    ▼
-   4 个候选模型比较（ROC-AUC）
-                    │
-                    ▼
- best_model.joblib + model_metadata.json
-                    │
-          FastAPI /predict
-                    │
-          Streamlit 页面展示
+interactions.csv (500k rows, 43 columns)      users.csv      videos.csv
+             │                                     │              │
+             ▼                                     ▼              ▼
+   prepare_data.py     chunked streaming, Pandera contract check
+             ▼
+   processed_interactions.csv     500k rows x 2 features + label + split keys
+             ▼
+   train.py            chronological split -> 4 candidates
+                       -> paired-bootstrap tie test -> cost-based selection
+                       -> calibration gate -> operating-point analysis
+             ▼
+   best_model.joblib · model_metadata.json · training_report.json · 6 figures
+             ▼
+   api.py              POST /predict · GET /health · GET /model/info
+             ▼
+   app.py              Streamlit: input validation, gauge, model info
 ```
 
-### 4. 为什么不能直接拿 `engagement_score` 做特征？
+---
 
-因为它来自本次交互结果，相当于考试时把答案放进题目。工程中明确排除了 `liked`、`shared`、`commented`、`followed_creator`、`replayed` 和 `engagement_score`，只把前端输入及请求时可查到的用户/视频快照用于训练。
+## Feature selection
 
-## 目录说明
+Full derivation and every measurement: **[docs/FEATURE_SELECTION.md](docs/FEATURE_SELECTION.md)**.
+Reproduce with `python scripts/feature_selection.py`.
+
+Each candidate is screened univariately with a bootstrap interval and
+multivariately with permutation importance. A feature survives if either test
+clears its threshold.
+
+| Feature | ROC-AUC | 95% interval | Verdict |
+|---|---:|---|---|
+| `watch_time_seconds` | 0.5641 | [0.5623, 0.5660] | **keep** |
+| `watch_ratio` | 0.5569 | [0.5551, 0.5588] | **keep** |
+| `video_category` | 0.5065 | [0.5038, 0.5093] | drop |
+| `user_country` | 0.5060 | [0.5033, 0.5085] | drop |
+| `hour_of_day` | 0.5010 | [0.5000, 0.5034] | drop |
+| *…20 more* | ≤0.5063 | all reaching 0.500 | drop |
+
+Pruning costs nothing: the 25-feature model scores 0.5739 and the 2-feature model
+0.5721, a gap of 0.0018 against a standard error of about 0.0045. The two are
+indistinguishable, so the smaller one wins.
+
+**Why the other features are noise.** `users.csv` and `videos.csv` share
+identifier spaces with the interaction log but not attribute values. For the same
+`user_id`, the age on the interaction row and the age in `users.csv` disagree on
+**97.1%** of rows with a correlation of **0.0014**. Every shared field behaves
+the same way. Joining those files attaches values unrelated to the interaction
+being predicted — which is why a thirty-two-feature version of this project could
+train without any metric revealing the problem.
+
+**Leakage control.** `engagement_score` alone scores ROC-AUC **0.836**. It is
+computed from the outcome and does not exist when a request arrives. It, the five
+action columns, and `skipped_quickly` are excluded by an explicit blocklist in
+`features.py`, and a test asserts the blocklist never intersects the feature set.
+
+---
+
+## Model selection
+
+Four candidates across three model families, on the validation split:
+
+| Model | ROC-AUC | 95% interval | Gap to leader | Latency | Artefact |
+|---|---:|---|---|---:|---:|
+| gradient_boosting | 0.5742 | [0.5696, 0.5786] | — | 1.23 ms | 0.196 MB |
+| random_forest | 0.5736 | [0.5688, 0.5779] | [−0.0011, +0.0023] | 34.69 ms | 3.916 MB |
+| lightgbm | 0.5732 | [0.5684, 0.5775] | [−0.0009, +0.0029] | 1.74 ms | 0.692 MB |
+| **logistic_regression** | 0.5711 | [0.5667, 0.5757] | [−0.0002, +0.0060] | **1.03 ms** | **0.002 MB** |
+
+![Candidate scorecard](image/model_comparison.png)
+
+Every gap interval contains zero: the four models are **statistically tied**. The
+per-model standard error (~0.0045) exceeds the entire spread between them
+(0.0031), so ranking by point estimate would ranks sampling noise and would flip
+on a different seed.
+
+The rule encoded in `train.py`:
+
+```
+1. Cost veto      latency > 50 ms or artefact > 100 MB -> disqualified
+2. Tie test       paired bootstrap; gap interval containing 0 -> tied
+3. Cheapest wins  among the tied, smallest artefact then lowest latency
+```
+
+Winner: **logistic regression**, 1,958x smaller and 34x faster than the random
+forest with no measurable loss. This is the one-standard-error rule from CART
+(Breiman et al., 1984) applied to operational cost.
+
+The tie is itself the finding: four model families converging within noise means
+the ceiling is set by the available signal, not by model capacity.
+
+### Calibration
+
+![Calibration](image/calibration.png)
+
+| Metric | Raw | Calibrated |
+|---|---:|---:|
+| Brier | 0.19840 | **0.19694** |
+| ECE | 0.02725 | **0.00353** |
+
+Isotonic calibration is fitted on validation and shipped only because Brier — a
+strictly proper scoring rule — improved. ECE alone is not a sufficient gate: it
+can be driven toward zero by collapsing every prediction to the base rate.
+
+One consequence is documented rather than hidden: isotonic regression is a step
+function, and at this signal level it collapses to **eight distinct output
+probabilities**. Ranking is unaffected; threshold choice is quantised.
+
+---
+
+## The operating point
+
+![Operating points](image/operating_points.png)
+
+The calibrated model's maximum output is **0.389**. No prediction reaches 0.5, so
+at the default threshold every candidate reports F1 = 0.0 — which is exactly the
+degenerate result a previous version of this project shipped without noticing.
+That was never a broken model; it was a broken threshold.
+
+F1-optimisation does not rescue it. Across the sweep F1 peaks at threshold 0.01,
+flagging 100% of traffic: on a weak-signal problem F1 collapses into "treat
+everybody", which is true and useless as guidance.
+
+The operating point is therefore chosen by budget:
+
+| Traffic flagged | Threshold | Precision | Recall | Lift |
+|---:|---:|---:|---:|---:|
+| 7.3% | 0.3890 | 0.396 | 0.102 | 1.41x |
+| **23.9%** | **0.3812** | **0.393** | **0.334** | **1.40x** |
+| 100% | 0.2366 | 0.281 | 1.000 | 1.00x |
+
+**Recommendation:** threshold 0.3812. Reaching a quarter of traffic selects a
+group 1.40x richer in engaged users than random, capturing a third of all
+engagement. `/predict` returns this threshold explicitly, and `predicted_engaged`
+is computed against it rather than against 0.5.
+
+![Decile lift](image/lift_deciles.png)
+
+The decile table shows where the signal lives: the top three deciles run at
+1.33–1.41x lift and hold 41% of engaged users, while deciles four through ten are
+flat at about 0.85x. The model separates a top ~30% and is uninformative below
+that — which is worth knowing before promising more.
+
+---
+
+## Data and label definition
+
+| File | Rows | Content |
+|---|---:|---|
+| `data/interactions.csv` | 500,000 | View log with timestamps, sessions and outcomes |
+| `data/users.csv` | 25,000 | User profiles |
+| `data/videos.csv` | 35,000 | Video metadata |
+
+**Label.** `target_engaged = liked OR shared OR commented OR followed_creator OR
+replayed`. Positive rate **27.79%**.
+
+**Split.** Chronological: earliest 70% train, next 15% validation, latest 15%
+test. The log spans 2025-07-14 to 2025-08-14, so this matches production, where
+the past predicts the future.
+
+The training script also fits the winner on a random split and reports both.
+Chronological test ROC-AUC is 0.5796 against 0.5770 for the random split — a
+difference of −0.0026. **The expected optimism did not materialise**: this data
+has no material temporal drift. The chronological split is kept because it is the
+one that matches production and will show drift the day it appears, but the
+honest report is that it changed nothing here.
+
+`interactions.csv` is 139 MB, above GitHub's 100 MB single-file limit, and is
+excluded by `.gitignore`. It must be supplied locally.
+
+---
+
+## Interface
+
+![Single Prediction page](image/ui_single_prediction.png)
+
+Client-side format validation (specification §7.1) rejects a malformed identifier
+before any network call, so a typo produces an immediate message rather than a
+round trip and a 422. The server repeats the check — that copy is the one that
+protects the service.
+
+---
+
+## Repository layout
 
 ```text
-app.py                         Streamlit 前端
+app.py                            Streamlit front end
 src/single_prediction/
-  features.py                 离线/在线共享特征定义
-  prepare_data.py             数据处理
-  train.py                    四模型训练和选择
-  api.py                      FastAPI 服务
-scripts/                       便捷命令入口
-tests/                         基础自动测试
-data/                          原始数据与生成的训练表
-models/                        生成的模型和元数据（不提交）
+  config.py                      paths and thresholds, all env-overridable
+  features.py                    the feature contract and blocklists
+  prepare_data.py                chunked offline feature table construction
+  train.py                       candidate comparison, tie test, calibration, operating points
+  metrics.py                     discrimination, calibration, operating-point analysis
+  api.py                         /predict · /health · /model/info
+  plots.py                       six figures, regenerated by train.py
+scripts/
+  feature_selection.py           the measurement behind the two-feature model
+  prepare_data.py / train_models.py   CLI entry points
+monitoring/
+  monitoring.yaml                thresholds derived from the training run
+  check_drift.py                 PSI input drift, output drift, with a self-test
+docs/
+  FEATURE_SELECTION.md           why two features
+  DESIGN_DECISIONS.md            seven ADRs
+  API.md                         endpoint contract
+tests/                           43 tests covering specification §9.2 in full
+image/                           figures
+reports/                         feature_selection.json, training_report.json
 ```
 
-## 从零运行
+---
 
-项目要求 Python 3.10–3.13。以下命令在 macOS/Linux 中执行；Windows 可把激活命令换成 `.venv\\Scripts\\activate`。
+## Quick start
+
+Python 3.10–3.13.
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
 python -m pip install -r requirements-dev.txt
 python -m pip install -e .
 ```
 
-确认 `data/users.csv`、`data/videos.csv`、`data/interactions.csv` 已存在，然后依次运行：
+Place `interactions.csv`, `users.csv` and `videos.csv` in `data/`, then:
 
 ```bash
-python -m single_prediction.prepare_data
-python -m single_prediction.train
-pytest
+python scripts/feature_selection.py          # ~4 min, writes the evidence
+python -m single_prediction.prepare_data     # ~1 min
+python -m single_prediction.train            # ~1 min, writes models/ reports/ image/
+pytest -q                                    # 43 passed
+python monitoring/check_drift.py --self-test
 ```
 
-训练会输出四个模型的 ROC-AUC、log loss、accuracy 和 F1，并把 ROC-AUC 最高者保存为 `models/best_model.joblib`。完整 50 万行训练会明显慢于快速演示；只检查链路时可使用：
-
-```bash
-python -m single_prediction.prepare_data --max-rows 10000
-python -m single_prediction.train --max-rows 10000
-```
-
-注意：烟雾训练会覆盖本地模型工件。课程最终结果请重新用完整数据运行前两条无 `--max-rows` 的命令。
-
-## 启动与操作
-
-开两个终端并激活同一个 `.venv`：
+Services, in two terminals:
 
 ```bash
 uvicorn single_prediction.api:app --reload --host 127.0.0.1 --port 8000
-```
-
-```bash
 streamlit run app.py
 ```
 
-浏览器打开 `http://localhost:8501`。可使用数据中真实存在的默认值 `user_000001` 和 `video_0000001`。API 文档位于 `http://127.0.0.1:8000/docs`，健康检查位于 `http://127.0.0.1:8000/health`。
+---
 
-请求示例：
+## Verification
 
-```bash
-curl -X POST http://127.0.0.1:8000/predict \
-  -H 'Content-Type: application/json' \
-  -d '{"user_id":"user_000001","video_id":"video_0000001","watch_time":45,"hour_of_day":14}'
-```
+| # | Step | Expected |
+|---|---|---|
+| 1 | `python -m single_prediction.prepare_data` | 500,000 rows, positive rate 27.79% |
+| 2 | `python scripts/feature_selection.py` | keeps 2 of 25; pruned and full within ±0.002 |
+| 3 | `python -m single_prediction.train` | four candidates reported tied; winner logistic regression; 6 figures |
+| 4 | `pytest -q` | 43 passed |
+| 5 | `GET /health` | `status: healthy`, 25,000 users and 35,000 videos indexed |
+| 6 | `POST /predict` valid | probability in [0, 1] with confidence and threshold |
+| 7 | `POST /predict` malformed | 422 |
+| 8 | `POST /predict` unknown id | 404 |
+| 9 | Boundaries: `watch_time` 0 and 3600, `hour_of_day` 0 and 23 | 200 |
+| 10 | Move the model file, restart | `/health` reports `not_ready` with the cause; `/predict` returns 503 |
+| 11 | `python monitoring/check_drift.py --self-test` | quiet traffic stays quiet, shifted traffic alerts |
 
-## 验收路线
+---
 
-1. 运行数据处理，确认输出行数与输入交互行数一致、标签正例率合理。
-2. 运行训练，确认四个模型都有指标、最佳模型和元数据文件已生成。
-3. 运行 `pytest`，确认特征标签、在线查表和置信度规则通过。
-4. 启动 API，检查 `/health` 中 `status` 为 `healthy`。
-5. 对真实 ID 调用 `/predict`，检查概率在 0–1、耗时和模型版本存在。
-6. 输入未知 ID、非法小时或负观看时长，确认返回清晰的 404/422 错误。
-7. 启动 Streamlit，完成一次页面预测并展开 JSON。
+## Limitations
 
-## GitHub 本地准备与数据限制
+| Limitation | Consequence | Remediation |
+|---|---|---|
+| Only watch behaviour carries signal | ROC-AUC is bounded near 0.60 | New data: real user history, video embeddings, sequence context |
+| `videos.csv` duration disagrees with the log on 90% of rows | Serving computes `watch_ratio` from a different duration than training | A point-in-time feature store returning values as of a timestamp |
+| Snapshot files are uncorrelated with the log | User and video attributes cannot be used at all | Regenerate the dataset so the three files describe one universe |
+| Isotonic output is quantised to 8 values | Threshold choice is coarse | Sigmoid calibration, or accept the quantisation |
+| No online monitoring wired up | Config and checker exist but nothing runs them | Schedule `check_drift.py`; add the labelled calibration job |
+| No A/B framework | Offline lift is not shown to move business metrics | Test the 23.9% treatment group against a holdout |
 
-当前 `.gitignore` 会排除虚拟环境、密钥、生成模型、处理后数据以及 139 MB 的 `data/interactions.csv`。GitHub 普通 Git 拒绝超过 100 MB 的单文件，因此不要强行提交该 CSV。可选方案：
+---
 
-- 课程仓库只提交代码、小型元数据和说明，另行提供数据下载方式；或
-- 经课程允许后使用 Git LFS：`git lfs track "data/interactions.csv"`，并提交生成的 `.gitattributes`。
+## References
 
-创建远程仓库后，推荐通过 GitHub CLI 的浏览器授权 `gh auth login --web`，或使用系统凭据管理器保存细粒度 token。不要把密码或 token 写入代码、`.env`、聊天消息或 Git 历史。本项目不会代替你创建远程仓库或上传。
+- Breiman, L. et al. (1984). *Classification and Regression Trees.* — the one-standard-error rule.
+- Efron, B. & Tibshirani, R. (1993). *An Introduction to the Bootstrap.* — the paired bootstrap.
+- Niculescu-Mizil, A. & Caruana, R. (2005). *Predicting Good Probabilities With Supervised Learning.* ICML.
+- Saito, T. & Rehmsmeier, M. (2015). *The Precision-Recall Plot Is More Informative than the ROC Plot on Imbalanced Datasets.* PLOS ONE 10(3).
+- Sculley, D. et al. (2015). *Hidden Technical Debt in Machine Learning Systems.* NeurIPS.
+- Zinkevich, M. *Rules of Machine Learning.* https://developers.google.com/machine-learning/guides/rules-of-ml
+- scikit-learn, *Probability calibration.* https://scikit-learn.org/stable/modules/calibration.html
 
-本地发布前可检查：
+---
 
-```bash
-git status
-git check-ignore -v data/interactions.csv models/best_model.joblib .env
-git diff --check
-```
+## Related
+
+- Batch prediction: the follow-on project, adding `/predict/batch` with per-row fault tolerance.
