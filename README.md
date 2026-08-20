@@ -1,21 +1,80 @@
-# Cognitive Shorts: Single Prediction
+# Cognitive Shorts Recommendation System
 
-An end-to-end engagement prediction system for short-video interactions. Raw
-interaction logs are processed offline into a leakage-safe feature table, four
-candidate models are compared against a cost-aware statistical decision rule, and
-the selected model is served through a FastAPI service with a Streamlit front
-end.
+**The problem.** A short-video platform logs every user-video interaction —
+views, likes, comments, shares, follows, replays. That log is a record of what
+already happened. It is worth far more if it can tell you what is *about* to
+happen: which of the next million impressions is likely to earn engagement, and
+which is not.
 
-The headline result is a negative one, and it is the most useful thing in the
-repository: **on this dataset only watch behaviour predicts engagement.**
-Twenty-three of twenty-five candidate features are statistically indistinguishable
-from noise, and any honest model is bounded at roughly 0.58–0.60 ROC-AUC. The
-project is built to demonstrate that claim rather than assert it.
+This project turns that log into an end-to-end ML system that answers the
+question one request at a time, in production, with a calibrated probability.
+
+```text
+OFFLINE                    TRAINING                   ONLINE
+raw interaction CSVs  →    feature table         →    front end takes 3 inputs
+       │                        │                            │
+       ▼                        ▼                            ▼
+leakage-safe feature      four candidates,            backend derives the full
+table, built by           compared by a               feature set, calls the
+chunked streaming         statistical tie test        model, returns probability
+with a schema contract    then by cost                and a confidence band
+```
+
+| Stage | What happens | Why it matters |
+|---|---|---|
+| **Offline** | Raw CSVs are streamed in chunks into a model-ready feature table, with leaking and unservable columns blocked by contract | The training table cannot contain anything a live request could not supply |
+| **Training** | Four candidate models are compared, tied on a paired bootstrap, then separated on cost; the winner is calibrated and given an operating point | The choice is a measurement, not a preference |
+| **Online** | The page collects three inputs; the service resolves identifiers, derives the features, and returns a probability with a confidence band | The caller supplies what a caller has, not what the model needs |
+
+---
+
+## Business value
+
+**What it buys you.** At the recommended operating point the model flags 23.9%
+of traffic and finds engaged users **1.40x more often than acting at random**.
+Against a 28.1% base rate, precision on the flagged slice is 39.3%. For any
+intervention with a per-impression cost — a push notification, a promoted slot,
+a creator payout — that ratio is the difference between spending on a quarter
+of traffic and spending on all of it.
+
+**The probability is a rate, not a rank.** Calibration error is 0.0035, down
+from 0.0273. A row scoring 0.38 means roughly 38 in 100 such rows engage, so
+the output can be budgeted against and summed across a batch — not merely
+sorted. Most engagement models cannot honestly claim this.
+
+**It costs almost nothing to run.** The shipped model is 3 KB and scores a
+request in a dot product. There is no GPU, no feature store, no model registry
+in the serving path.
+
+**And it tells you what not to build.** Twenty-three of twenty-five candidate
+features — every user profile attribute, every video metadata field, time of
+day — are statistically indistinguishable from noise on this data. Each one
+would have cost a pipeline, a backfill and a monitoring surface to serve. The
+measurement that ruled them out is the cheapest deliverable here.
+
+## Technical value
+
+| Concern | What was done | Instead of |
+|---|---|---|
+| **Leakage** | Chronological split; outcome columns and unservable columns blocked by explicit contract | A random split and an implicit feature list |
+| **Model choice** | Paired bootstrap tie test — all four candidates statistically indistinguishable — then the cheapest of the tied set | Taking the highest validation AUC |
+| **Probability quality** | Isotonic calibration, applied because it was measured to help, with its PR-AUC cost recorded | Shipping raw scores and calling them probabilities |
+| **Decision threshold** | Chosen from an operating-point sweep and shipped in model metadata | Hard-coding 0.5, which on this model flags nothing at all |
+| **Feature set** | 2 of 25, selected by measured contribution; the pruned model scores *higher* than the full one | Keeping every available column |
+| **Operability** | `/health` stays serviceable when the model fails to load; 43 tests; containerised with a profile-gated trainer | A process that dies silently and a README that says "run it" |
+
+**The honest headline.** On this dataset only watch behaviour predicts
+engagement, and any truthful model is bounded at roughly 0.58–0.60 ROC-AUC.
+That ceiling is stated up front and measured rather than asserted. A system
+that reports a weak signal accurately is worth more than one that reports a
+strong signal it does not have.
 
 ---
 
 ## Contents
 
+- [Business value](#business-value)
+- [Technical value](#technical-value)
 - [Results](#results)
 - [Pipeline](#pipeline)
 - [Feature selection](#feature-selection)
