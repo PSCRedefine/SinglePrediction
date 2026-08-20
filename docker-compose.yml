@@ -1,0 +1,60 @@
+# Three services from one image. `train` is a one-shot job behind a profile;
+# `api` and `console` are the long-running pair.
+#
+# models/ is a bind mount rather than an image layer because it is gitignored —
+# a fresh clone has no model, and the trainer has to be able to write one that
+# the server then picks up.
+
+services:
+  train:
+    build: .
+    image: single-prediction:latest
+    profiles: ["train"]
+    command: >
+      sh -c "python -m single_prediction.prepare_data &&
+             python -m single_prediction.train"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+      - ./reports:/app/reports
+      - ./image:/app/image
+
+  api:
+    build: .
+    image: single-prediction:latest
+    command: >
+      uvicorn single_prediction.api:app
+      --host 0.0.0.0 --port 8000 --workers 2
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./models:/app/models:ro
+    healthcheck:
+      # /health stays serviceable when the model fails to load, so the check
+      # tests the model rather than the port. Without a trained model in
+      # ./models this service is up but never becomes healthy — which is the
+      # honest signal, and what keeps the console from starting.
+      test: ["CMD", "python", "-c",
+             "import urllib.request,json,sys;
+              b=json.load(urllib.request.urlopen('http://127.0.0.1:8000/health'));
+              sys.exit(0 if b['status']=='healthy' else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  console:
+    build: .
+    image: single-prediction:latest
+    command: >
+      streamlit run app.py
+      --server.port 8501 --server.address 0.0.0.0
+    environment:
+      SINGLE_PREDICTION_API_URL: http://api:8000
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
