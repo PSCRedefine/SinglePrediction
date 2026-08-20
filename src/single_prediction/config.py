@@ -1,4 +1,4 @@
-"""Paths and environment-backed application settings."""
+"""Paths, thresholds and environment-backed settings."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 MODELS_DIR = PROJECT_ROOT / "models"
+REPORTS_DIR = PROJECT_ROOT / "reports"
+IMAGE_DIR = PROJECT_ROOT / "image"
+MONITORING_DIR = PROJECT_ROOT / "monitoring"
 
 
 def env_path(name: str, default: Path) -> Path:
@@ -24,9 +27,15 @@ INTERACTIONS_PATH = env_path(
 PROCESSED_PATH = env_path(
     "SINGLE_PREDICTION_PROCESSED_PATH", DATA_DIR / "processed_interactions.csv"
 )
-MODEL_PATH = env_path(
-    "SINGLE_PREDICTION_MODEL_PATH", MODELS_DIR / "best_model.joblib"
-)
+MODEL_PATH = env_path("SINGLE_PREDICTION_MODEL_PATH", MODELS_DIR / "best_model.joblib")
 METADATA_PATH = env_path(
     "SINGLE_PREDICTION_METADATA_PATH", MODELS_DIR / "model_metadata.json"
 )
+REPORT_PATH = env_path(
+    "SINGLE_PREDICTION_REPORT_PATH", REPORTS_DIR / "training_report.json"
+)
+
+# Confidence bands. These describe how far a prediction sits from a coin flip,
+# not how likely it is to be correct.
+CONFIDENCE_HIGH = 0.80
+CONFIDENCE_MEDIUM = 0.65

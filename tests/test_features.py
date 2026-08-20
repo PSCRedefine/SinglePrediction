@@ -1,79 +1,110 @@
+"""The feature contract: leakage, watch ratio, identifier handling."""
+
+from __future__ import annotations
+
+import numpy as np
 import pandas as pd
 import pytest
 
-from single_prediction.features import FEATURE_COLUMNS, TARGET_COLUMN, FeatureStore, build_processed_table
+from single_prediction.features import (
+    FEATURE_COLUMNS,
+    LEAKY_COLUMNS,
+    TARGET_COLUMN,
+    UNSERVABLE_COLUMNS,
+    FeatureStore,
+    build_processed_table,
+    validate_ids,
+    watch_ratio,
+)
 
 
-def test_build_processed_table_and_target():
-    interactions = pd.DataFrame(
+def _interactions() -> pd.DataFrame:
+    return pd.DataFrame(
         [
             {
-                "interaction_id": "i1",
-                "user_id": "user_1",
-                "video_id": "video_1",
-                "watch_time_seconds": 10,
-                "hour_of_day": 12,
-                "liked": False,
-                "shared": False,
-                "commented": True,
-                "followed_creator": False,
-                "replayed": False,
-            }
-        ]
-    )
-    users = pd.DataFrame(
-        [
+                "interaction_id": "int_1", "user_id": "user_000001",
+                "video_id": "video_0000001", "session_id": "s1",
+                "timestamp": "2025-07-14T22:06:00Z",
+                "watch_time_seconds": 15, "video_duration_seconds": 30,
+                "liked": False, "shared": False, "commented": True,
+                "followed_creator": False, "replayed": False,
+            },
             {
-                "user_id": "user_1",
-                "age": 20,
-                "gender": "F",
-                "country": "US",
-                "language": "en",
-                "account_age_days": 100,
-                "subscriber_count": 10,
-                "avg_session_length_minutes": 5,
-                "total_video_views": 20,
-                "total_likes_given": 3,
-                "is_premium": False,
-                "primary_device": "mobile",
-                "primary_platform": "ios",
-            }
+                "interaction_id": "int_2", "user_id": "user_000002",
+                "video_id": "video_0000002", "session_id": "s1",
+                "timestamp": "2025-07-14T22:07:00Z",
+                "watch_time_seconds": 0, "video_duration_seconds": 60,
+                "liked": False, "shared": False, "commented": False,
+                "followed_creator": False, "replayed": False,
+            },
         ]
     )
-    videos = pd.DataFrame(
-        [
-            {
-                "video_id": "video_1",
-                "category": "News",
-                "duration_seconds": 20,
-                "days_since_upload": 3,
-                "view_count": 100,
-                "like_count": 10,
-                "comment_count": 2,
-                "share_count": 1,
-                "has_music": True,
-                "has_text_overlay": False,
-                "has_effects": False,
-                "has_voiceover": True,
-                "video_quality": "1080p",
-                "trending_score": 0.5,
-                "avg_watch_time_seconds": 12,
-                "retention_rate": 0.6,
-                "engagement_rate": 0.1,
-                "language": "en",
-            }
-        ]
-    )
-    result = build_processed_table(interactions, users, videos)
+
+
+def test_target_is_any_active_action():
+    result = build_processed_table(_interactions())
     assert result.loc[0, TARGET_COLUMN] == 1
+    assert result.loc[1, TARGET_COLUMN] == 0
+
+
+def test_no_leaky_or_unservable_column_can_become_a_feature():
+    """The two exclusion lists must never intersect the feature set."""
+    for column in LEAKY_COLUMNS + UNSERVABLE_COLUMNS:
+        assert column not in FEATURE_COLUMNS
+
+
+def test_processed_table_contains_only_the_selected_features():
+    result = build_processed_table(_interactions())
+    for column in LEAKY_COLUMNS:
+        assert column not in result.columns
+    assert set(FEATURE_COLUMNS).issubset(result.columns)
+
+
+def test_split_columns_survive_for_the_chronological_split():
+    result = build_processed_table(_interactions())
+    assert "timestamp" in result.columns
+    assert "session_id" in result.columns
+
+
+def test_watch_ratio_is_clipped_and_survives_zero_duration():
+    ratio = watch_ratio(pd.Series([15.0, 999.0, 10.0]), pd.Series([30.0, 30.0, 0.0]))
+    assert ratio.tolist() == [0.5, 1.0, 0.0]
+
+
+def test_watch_ratio_uses_the_interaction_row_duration_when_present():
+    """The interaction's own duration disagrees with videos.csv on 90% of rows."""
+    interactions = _interactions()
+    videos = pd.DataFrame({"video_id": ["video_0000001"], "duration_seconds": [300]})
+    result = build_processed_table(interactions, videos)
+    # 15 / 30 from the interaction row, not 15 / 300 from videos.csv
     assert result.loc[0, "watch_ratio"] == pytest.approx(0.5)
-    assert list(result.columns[-1:]) == [TARGET_COLUMN]
-    assert not result[FEATURE_COLUMNS].isna().any().any()
 
 
-def test_feature_store_rejects_unknown_id(tmp_path):
-    users = pd.DataFrame(columns=["user_id", "age", "gender", "country", "language", "account_age_days", "subscriber_count", "avg_session_length_minutes", "total_video_views", "total_likes_given", "is_premium", "primary_device", "primary_platform"])
-    videos = pd.DataFrame(columns=["video_id", "category", "duration_seconds", "days_since_upload", "view_count", "like_count", "comment_count", "share_count", "has_music", "has_text_overlay", "has_effects", "has_voiceover", "video_quality", "trending_score", "avg_watch_time_seconds", "retention_rate", "engagement_rate", "language"])
-    store = FeatureStore(users.set_index("user_id", drop=False), videos.set_index("video_id", drop=False))
+def test_identifier_validation():
+    validate_ids("user_000001", "video_0000001")
+    with pytest.raises(ValueError):
+        validate_ids("nope", "video_0000001")
+    with pytest.raises(ValueError):
+        validate_ids("user_000001", "nope")
+
+
+def test_feature_store_rejects_unknown_and_malformed_ids(feature_csvs):
+    store = FeatureStore.from_csv(*map(str, feature_csvs))
+    frame = store.build_one("user_000001", "video_0000001", 15.0)
+    assert list(frame.columns) == FEATURE_COLUMNS
+    assert frame.loc[0, "watch_ratio"] == pytest.approx(0.5)
+
     with pytest.raises(KeyError):
-        store.build_one("user_1", "video_1", 10, 12)
+        store.build_one("user_999999", "video_0000001", 10.0)
+    with pytest.raises(KeyError):
+        store.build_one("user_000001", "video_9999999", 10.0)
+    with pytest.raises(ValueError):
+        store.build_one("bad", "video_0000001", 10.0)
+    with pytest.raises(ValueError):
+        store.build_one("user_000001", "video_0000001", -1.0)
+
+
+def test_feature_store_handles_zero_duration(feature_csvs):
+    store = FeatureStore.from_csv(*map(str, feature_csvs))
+    frame = store.build_one("user_000001", "video_0000005", 30.0)
+    assert frame.loc[0, "watch_ratio"] == 0.0
