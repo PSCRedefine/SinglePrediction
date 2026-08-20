@@ -59,6 +59,7 @@ interactions.csv (500k rows, 43 columns)      users.csv      videos.csv
    prepare_data.py     chunked streaming, Pandera contract check
              ▼
    processed_interactions.csv     500k rows x 2 features + label + split keys
+                                  (8 columns; preview in docs/DATA_PREVIEW.md)
              ▼
    train.py            chronological split -> 4 candidates
                        -> paired-bootstrap tie test -> cost-based selection
@@ -204,6 +205,12 @@ that — which is worth knowing before promising more.
 | `data/interactions.csv` | 500,000 | View log with timestamps, sessions and outcomes |
 | `data/users.csv` | 25,000 | User profiles |
 | `data/videos.csv` | 35,000 | Video metadata |
+| `data/processed_interactions.csv` | 500,000 | **Generated** feature table — the only input `train.py` reads |
+
+> **Data preview:** [docs/DATA_PREVIEW.md](docs/DATA_PREVIEW.md) — schema, first rows,
+> distributions and null counts for the generated table, plus a 20-row
+> [sample CSV](docs/processed_interactions_sample.csv) you can open directly. The full
+> file is gitignored; rebuild it with `python -m single_prediction.prepare_data`.
 
 **Label.** `target_engaged = liked OR shared OR commented OR followed_creator OR
 replayed`. Positive rate **27.79%**.
@@ -254,6 +261,8 @@ monitoring/
   monitoring.yaml                thresholds derived from the training run
   check_drift.py                 PSI input drift, output drift, with a self-test
 docs/
+  DATA_PREVIEW.md                schema and sample of the generated table
+  processed_interactions_sample.csv   first 20 rows, openable in any viewer
   FEATURE_SELECTION.md           why two features
   DESIGN_DECISIONS.md            seven ADRs
   API.md                         endpoint contract
