@@ -25,6 +25,7 @@ project is built to demonstrate that claim rather than assert it.
 - [Interface](#interface)
 - [Repository layout](#repository-layout)
 - [Quick start](#quick-start)
+- [Deployment](#deployment)
 - [Verification](#verification)
 - [Limitations](#limitations)
 - [References](#references)
@@ -246,6 +247,7 @@ protects the service.
 
 ```text
 app.py                            Streamlit front end
+Dockerfile, docker-compose.yml    one image: train, api, console
 src/single_prediction/
   config.py                      paths and thresholds, all env-overridable
   features.py                    the feature contract and blocklists
@@ -261,6 +263,7 @@ monitoring/
   monitoring.yaml                thresholds derived from the training run
   check_drift.py                 PSI input drift, output drift, with a self-test
 docs/
+  DEPLOYMENT.md                  running it, locally and in containers
   DATA_PREVIEW.md                schema and sample of the generated table
   processed_interactions_sample.csv   first 20 rows, openable in any viewer
   FEATURE_SELECTION.md           why two features
@@ -300,6 +303,34 @@ Services, in two terminals:
 uvicorn single_prediction.api:app --reload --host 127.0.0.1 --port 8000
 streamlit run app.py
 ```
+
+Console at http://localhost:8501. Two links skip the form:
+**`?demo=1`** fills a valid request and predicts it, **`?demo=invalid`** fills a
+malformed identifier so the validation path renders. The two screenshots above
+are those URLs, captured unedited.
+
+---
+
+## Deployment
+
+One image, three entry points — a one-shot trainer, the API on 8000, the
+console on 8501:
+
+```bash
+docker compose --profile train run --rm train   # writes models/, needs data/interactions.csv
+docker compose up --build
+```
+
+The trainer is behind a profile so `up` never retrains by accident, and
+`models/` is a bind mount rather than an image layer because it is gitignored —
+a fresh clone has no model, and the API will honestly report `degraded` until
+one exists. The console waits on a health check that tests `status == healthy`
+rather than the port, so it never starts against a service that cannot score.
+
+Full guide — configuration, probes, scaling, drift checks, troubleshooting:
+**[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**. The local path there was run end
+to end; the Docker build was not, because Docker is not installed on the
+development machine, and the document says so.
 
 ---
 

@@ -1,0 +1,19 @@
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.DS_Store
+_to_delete/
+docs/
+tests/
+image/
+reports/
+*.log
+
+# Mounted at runtime, never baked: too large, or absent in a fresh clone.
+data/interactions.csv
+data/processed_interactions.csv
+models/
