@@ -1,40 +1,40 @@
-# processed_interactions.csv — 数据预览
+# processed_interactions.csv — Data Preview
 
-`prepare_data.py` 的产物，也是 `train.py` 唯一的输入。本文件是它的“缩略图”，方便随时查阅而不必打开 47 MB 的原文件。
+The output of `prepare_data.py`, and the only input `train.py` takes. This document is its "thumbnail", so the table can be checked at any time without opening the 47 MB original.
 
-- 完整文件：`data/processed_interactions.csv`（已 gitignore，用 `python -m single_prediction.prepare_data` 重建）
-- 可直接打开的样本：[`processed_interactions_sample.csv`](processed_interactions_sample.csv)（前 20 行）
-- 重建耗时约 1 分钟
+- Full file: `data/processed_interactions.csv` (gitignored; rebuild with `python -m single_prediction.prepare_data`)
+- Directly openable sample: [`processed_interactions_sample.csv`](processed_interactions_sample.csv) (first 20 rows)
+- Rebuilding takes about 1 minute
 
-## 规模
+## Scale
 
-| 项 | 值 |
+| Item | Value |
 |---|---|
-| 行数 | 500,000 |
-| 列数 | 8 |
-| 文件大小 | 47 MB |
-| 缺失值 | 0（全部 8 列） |
-| 正例率 `target_engaged` | 27.79% |
-| 时间跨度 | 2025-07-14 → 2025-08-14（约 1 个月） |
+| Rows | 500,000 |
+| Columns | 8 |
+| File size | 47 MB |
+| Missing values | 0 (all 8 columns) |
+| Positive rate `target_engaged` | 27.79% |
+| Time span | 2025-07-14 → 2025-08-14 (about 1 month) |
 
-## 列结构
+## Column structure
 
-8 列 = 3 个 ID + 2 个切分键 + 2 个特征 + 1 个标签。原始 `interactions.csv` 有 43 列，其余的要么泄漏标签、要么线上取不到，被 `features.py` 有意丢弃——理由见 [FEATURE_SELECTION.md](FEATURE_SELECTION.md)。
+8 columns = 3 IDs + 2 split keys + 2 features + 1 label. The original `interactions.csv` has 43 columns; the rest either leak the label or are unavailable in production, and are deliberately dropped by `features.py` — the reasoning is in [FEATURE_SELECTION.md](FEATURE_SELECTION.md).
 
-| # | 列名 | 类型 | 角色 | 唯一值 | 说明 |
+| # | Column | Type | Role | Unique values | Notes |
 |---|---|---|---|---|---|
-| 1 | `interaction_id` | object | ID | 500,000 | 每行唯一 |
+| 1 | `interaction_id` | object | ID | 500,000 | Unique per row |
 | 2 | `user_id` | object | ID | 25,000 | |
 | 3 | `video_id` | object | ID | 35,000 | |
-| 4 | `session_id` | object | 切分键 | 54,403 | 无 timestamp 时的兜底分组依据 |
-| 5 | `timestamp` | object | 切分键 | 499,915 | ISO-8601 UTC，**时序切分依赖此列** |
-| 6 | `watch_time_seconds` | int64 | **特征** | 61 | 0–60 秒 |
-| 7 | `watch_ratio` | float64 | **特征** | 231 | 0–1，观看时长 / 视频时长 |
-| 8 | `target_engaged` | int64 | **标签** | 2 | liked OR shared OR commented OR followed_creator OR replayed |
+| 4 | `session_id` | object | Split key | 54,403 | Fallback grouping key when timestamp is absent |
+| 5 | `timestamp` | object | Split key | 499,915 | ISO-8601 UTC, **the temporal split depends on this column** |
+| 6 | `watch_time_seconds` | int64 | **Feature** | 61 | 0–60 seconds |
+| 7 | `watch_ratio` | float64 | **Feature** | 231 | 0–1, watch time / video duration |
+| 8 | `target_engaged` | int64 | **Label** | 2 | liked OR shared OR commented OR followed_creator OR replayed |
 
-> `timestamp` 缺失会让 `train.py` 静默退化为随机切分而非时序切分——两列切分键必须存在。
+> A missing `timestamp` makes `train.py` silently degrade to a random split rather than a temporal one — both split key columns must be present.
 
-## 前 8 行
+## First 8 rows
 
 | interaction_id | user_id | video_id | session_id | timestamp | watch_time_seconds | watch_ratio | target_engaged |
 |---|---|---|---|---|---|---|---|
@@ -47,7 +47,7 @@
 | int_00000006 | user_009164 | video_0034865 | session_00000001 | 2025-08-07T13:46:26.523Z | 20 | 1.000000 | 1 |
 | int_00000007 | user_011672 | video_0017351 | session_00000001 | 2025-08-08T23:26:14.121Z | 40 | 1.000000 | 0 |
 
-## 数值分布
+## Numeric distribution
 
 | | watch_time_seconds | watch_ratio | target_engaged |
 |---|---|---|---|
@@ -59,12 +59,12 @@
 | 75% | 30.000000 | 0.950000 | 1.000000 |
 | max | 60.000000 | 1.000000 | 1.000000 |
 
-两个特征都无缺失、无需插补，量纲也接近，这是最终只保留它们的一个附带好处。信号强度有限（测试集 ROC-AUC 0.5796），这一点在 [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md) 里有交代。
+Neither feature has missing values or needs imputation, and their scales are close, which is an incidental benefit of keeping only these two in the end. The signal is weak (test set ROC-AUC 0.5796), a point covered in [DESIGN_DECISIONS.md](DESIGN_DECISIONS.md).
 
-## 自查命令
+## Self-check commands
 
 ```bash
 python -m single_prediction.prepare_data
-head -1 data/processed_interactions.csv    # 应输出上表的 8 个列名
-wc -l data/processed_interactions.csv      # 应为 500001（含表头）
+head -1 data/processed_interactions.csv    # should print the 8 column names in the table above
+wc -l data/processed_interactions.csv      # should be 500001 (including the header)
 ```
