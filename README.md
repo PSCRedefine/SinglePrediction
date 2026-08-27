@@ -1,5 +1,7 @@
 # Cognitive Shorts Recommendation System
 
+[![tests](https://github.com/PSCRedefine/SinglePrediction/actions/workflows/tests.yml/badge.svg)](https://github.com/PSCRedefine/SinglePrediction/actions/workflows/tests.yml)
+
 **The problem.** A short-video platform logs every user-video interaction —
 views, likes, comments, shares, follows, replays. That log is a record of what
 already happened. It is worth far more if it can tell you what is *about* to
@@ -8,6 +10,8 @@ which is not.
 
 This project turns that log into an end-to-end ML system that answers the
 question one request at a time, in production, with a calibrated probability.
+
+*One of four in [a series](#the-series):*  **Single Prediction** → [Batch Prediction](https://github.com/PSCRedefine/BatchPrediction) → [Model Info](https://github.com/PSCRedefine/ModelInfo) → [Analytics Dashboard](https://github.com/PSCRedefine/AnalyticsDashboard)
 
 ```text
 OFFLINE                    TRAINING                   ONLINE
@@ -88,6 +92,7 @@ strong signal it does not have.
 - [Verification](#verification)
 - [Limitations](#limitations)
 - [References](#references)
+- [The series](#the-series)
 
 ---
 
@@ -328,6 +333,7 @@ docs/
   FEATURE_SELECTION.md           why two features
   DESIGN_DECISIONS.md            seven ADRs
   API.md                         endpoint contract
+  PRODUCTION_READINESS.md        what it would need to carry real traffic
 tests/                           43 tests covering specification §9.2 in full
 image/                           figures
 reports/                         feature_selection.json, training_report.json
@@ -337,7 +343,7 @@ reports/                         feature_selection.json, training_report.json
 
 ## Quick start
 
-Python 3.10–3.13.
+Python 3.11–3.13. The code uses `datetime.UTC`, which 3.10 does not have.
 
 ```bash
 python3.12 -m venv .venv
@@ -413,6 +419,11 @@ development machine, and the document says so.
 
 ## Limitations
 
+This section lists what is known to be missing or imperfect in what was built.
+A wider account — what this service would need before it carries real traffic,
+ordered by risk, with the cost of each remedy — is in
+[docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md).
+
 | Limitation | Consequence | Remediation |
 |---|---|---|
 | Only watch behaviour carries signal | ROC-AUC is bounded near 0.60 | New data: real user history, video embeddings, sequence context |
@@ -436,6 +447,16 @@ development machine, and the document says so.
 
 ---
 
-## Related
+## The series
 
-- Batch prediction: the follow-on project, adding `/predict/batch` with per-row fault tolerance.
+Four repositories, read in this order, are one product line: score one, score
+many, check what is deployed, then watch it in production.
+
+1. **Single Prediction** *(you are here)* — one prediction per request — feature selection, model choice, calibration and the operating point
+2. [Batch Prediction](https://github.com/PSCRedefine/BatchPrediction) — up to 100 rows per call, with per-row fault isolation
+3. [Model Info](https://github.com/PSCRedefine/ModelInfo) — what is actually loaded in memory, and what that tells you
+4. [Analytics Dashboard](https://github.com/PSCRedefine/AnalyticsDashboard) — traffic and model-output monitoring over a request log
+
+Each repository runs on its own. The cost of that is stated plainly in each
+Limitations section: `features.py`, the API skeleton and the model artefact
+are duplicated across all four.
