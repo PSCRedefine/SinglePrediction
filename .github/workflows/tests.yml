@@ -42,3 +42,44 @@ jobs:
 
       - name: Test
         run: python -m pytest -q
+
+  smoke-train:
+    name: smoke train (from committed data)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install --no-deps -e .
+
+      # Trains the full pipeline on the committed processed dataset, capped so
+      # the job stays under a few minutes. Catches an artifact/schema drift
+      # that unit tests, which load the committed model, would not.
+      - name: Train
+        run: >
+          python -m single_prediction.train
+          --input data/processed_interactions.csv.gz
+          --max-rows 60000 --no-plots
+          --model-output /tmp/model.joblib
+          --metadata-output /tmp/metadata.json
+          --report-output /tmp/report.json
+
+      - name: Model answers
+        run: |
+          python - <<'EOF'
+          import joblib, json
+          model = joblib.load("/tmp/model.joblib")
+          meta = json.load(open("/tmp/metadata.json"))
+          proba = model.predict_proba([[45.0, 0.6]])[0, 1]
+          assert 0.0 <= proba <= 1.0, proba
+          print("smoke model:", meta["model_name"], "p =", round(float(proba), 4))
+          EOF

@@ -154,15 +154,41 @@ it beats the incumbent on a chronological hold-out by more than the bootstrap
 interval that `train.py` already computes. The selection machinery for this
 exists; it just is not wired to the release.
 
-### 11. The latency numbers are not load numbers
+### 11. The latency numbers were not load numbers — partially remedied
 
-The recorded percentiles come from sequential calls on a development machine.
-They say nothing about behaviour under concurrency, and there is no stated
-objective to hold the service to.
+The originally recorded percentiles came from sequential calls. The repository
+now carries `scripts/load_test.py` (standard library only, persistent
+connections, back-to-back requests per worker), and these are its numbers on an
+Apple-silicon laptop, 8-second runs per level after a discarded warm-up:
 
-**Remedy.** An availability and latency objective with an error budget, and a
-load test that establishes the knee. Publish the concurrency at which the
-objective stops holding.
+Single uvicorn worker:
+
+| concurrency | rps | p50 | p95 | p99 |
+|---:|---:|---:|---:|---:|
+| 1 | 481 | 1.7 ms | 3.6 ms | 8.4 ms |
+| 4 | 507 | 6.2 ms | 14.0 ms | 31.2 ms |
+| 16 | 515 | 23.9 ms | 59.4 ms | 177.9 ms |
+| 64 | 516 | 103.0 ms | 249.8 ms | 411.1 ms |
+
+Four workers:
+
+| concurrency | rps | p50 | p95 | p99 |
+|---:|---:|---:|---:|---:|
+| 1 | 197 | 2.9 ms | 11.6 ms | 44.1 ms |
+| 4 | 537 | 6.2 ms | 16.3 ms | 24.4 ms |
+| 16 | 972 | 14.2 ms | 32.4 ms | 58.7 ms |
+| 64 | 779 | 57.9 ms | 195.9 ms | 321.2 ms |
+
+The shape is the useful part. A single worker saturates near **515 rps** at
+concurrency 4 — beyond that, added concurrency buys queueing, not throughput,
+with latency growing linearly. Four workers peak near **970 rps** at
+concurrency 16 and *lose* throughput at 64 as contention sets in. So the knee
+is known: this service, on this hardware, should be run behind a concurrency
+limit of roughly 4 per worker, which is exactly the limit item 4 asks for.
+
+**Still missing.** A stated availability and latency objective to hold those
+numbers against, and a run on production-shaped hardware rather than a laptop.
+The measurement exists; the contract does not.
 
 ### 12. The operating point has no owner
 

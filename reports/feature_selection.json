@@ -1,0 +1,249 @@
+{
+  "rows": 500000,
+  "positive_rate": 0.277916,
+  "auc_threshold": 0.505,
+  "excluded_not_servable": [
+    "watch_percentage",
+    "skipped_quickly",
+    "scroll_velocity",
+    "sound_on",
+    "time_since_last_interaction",
+    "session_position",
+    "recommendation_source",
+    "app_version",
+    "engagement_score"
+  ],
+  "candidates": {
+    "watch_time_seconds": {
+      "auc": 0.56407,
+      "ci_low": 0.56231,
+      "ci_high": 0.56601,
+      "beats_noise": true,
+      "permutation_drop": 0.071725,
+      "permutation_std": 0.001032,
+      "matters_in_combination": true
+    },
+    "hour_of_day": {
+      "auc": 0.50053,
+      "ci_low": 0.50004,
+      "ci_high": 0.50187,
+      "beats_noise": false,
+      "permutation_drop": 0.000385,
+      "permutation_std": 0.000142,
+      "matters_in_combination": false
+    },
+    "day_of_week": {
+      "auc": 0.50088,
+      "ci_low": 0.50003,
+      "ci_high": 0.5025,
+      "beats_noise": false,
+      "permutation_drop": -1.4e-05,
+      "permutation_std": 4.4e-05,
+      "matters_in_combination": false
+    },
+    "is_weekend": {
+      "auc": 0.50027,
+      "ci_low": 0.50003,
+      "ci_high": 0.50153,
+      "beats_noise": false,
+      "permutation_drop": -8.8e-05,
+      "permutation_std": 4.1e-05,
+      "matters_in_combination": false
+    },
+    "watch_ratio": {
+      "auc": 0.55688,
+      "ci_low": 0.55513,
+      "ci_high": 0.55885,
+      "beats_noise": true,
+      "permutation_drop": 0.000289,
+      "permutation_std": 0.000255,
+      "matters_in_combination": false
+    },
+    "user_age": {
+      "auc": 0.50046,
+      "ci_low": 0.50004,
+      "ci_high": 0.50191,
+      "beats_noise": false,
+      "permutation_drop": -0.000113,
+      "permutation_std": 0.000269,
+      "matters_in_combination": false
+    },
+    "user_gender": {
+      "auc": 0.50181,
+      "ci_low": 0.50032,
+      "ci_high": 0.50349,
+      "beats_noise": false,
+      "permutation_drop": -6.7e-05,
+      "permutation_std": 0.000177,
+      "matters_in_combination": false
+    },
+    "user_country": {
+      "auc": 0.5037,
+      "ci_low": 0.50178,
+      "ci_high": 0.50538,
+      "beats_noise": false,
+      "permutation_drop": 0.000162,
+      "permutation_std": 0.000311,
+      "matters_in_combination": false
+    },
+    "user_language": {
+      "auc": 0.50427,
+      "ci_low": 0.50263,
+      "ci_high": 0.50607,
+      "beats_noise": false,
+      "permutation_drop": -0.000182,
+      "permutation_std": 0.000238,
+      "matters_in_combination": false
+    },
+    "user_account_age_days": {
+      "auc": 0.50068,
+      "ci_low": 0.50003,
+      "ci_high": 0.50248,
+      "beats_noise": false,
+      "permutation_drop": 0.000878,
+      "permutation_std": 0.000274,
+      "matters_in_combination": false
+    },
+    "user_subscriber_count": {
+      "auc": 0.50029,
+      "ci_low": 0.50005,
+      "ci_high": 0.50222,
+      "beats_noise": false,
+      "permutation_drop": -0.000271,
+      "permutation_std": 0.000246,
+      "matters_in_combination": false
+    },
+    "user_primary_device": {
+      "auc": 0.50047,
+      "ci_low": 0.50002,
+      "ci_high": 0.50205,
+      "beats_noise": false,
+      "permutation_drop": -0.00019,
+      "permutation_std": 6e-05,
+      "matters_in_combination": false
+    },
+    "user_primary_platform": {
+      "auc": 0.50083,
+      "ci_low": 0.50003,
+      "ci_high": 0.50237,
+      "beats_noise": false,
+      "permutation_drop": -3e-05,
+      "permutation_std": 0.00012,
+      "matters_in_combination": false
+    },
+    "user_is_premium": {
+      "auc": 0.50024,
+      "ci_low": 0.50001,
+      "ci_high": 0.50125,
+      "beats_noise": false,
+      "permutation_drop": 2e-06,
+      "permutation_std": 1.3e-05,
+      "matters_in_combination": false
+    },
+    "video_category": {
+      "auc": 0.50361,
+      "ci_low": 0.50186,
+      "ci_high": 0.5055,
+      "beats_noise": false,
+      "permutation_drop": -2.5e-05,
+      "permutation_std": 0.000263,
+      "matters_in_combination": false
+    },
+    "video_duration_seconds": {
+      "auc": 0.50095,
+      "ci_low": 0.50003,
+      "ci_high": 0.50251,
+      "beats_noise": false,
+      "permutation_drop": -2.8e-05,
+      "permutation_std": 9.7e-05,
+      "matters_in_combination": false
+    },
+    "video_view_count": {
+      "auc": 0.50048,
+      "ci_low": 0.50002,
+      "ci_high": 0.50213,
+      "beats_noise": false,
+      "permutation_drop": -0.000543,
+      "permutation_std": 0.000309,
+      "matters_in_combination": false
+    },
+    "video_like_count": {
+      "auc": 0.50148,
+      "ci_low": 0.50011,
+      "ci_high": 0.50307,
+      "beats_noise": false,
+      "permutation_drop": -0.000169,
+      "permutation_std": 0.000557,
+      "matters_in_combination": false
+    },
+    "video_comment_count": {
+      "auc": 0.50093,
+      "ci_low": 0.50003,
+      "ci_high": 0.50275,
+      "beats_noise": false,
+      "permutation_drop": 0.000502,
+      "permutation_std": 0.000156,
+      "matters_in_combination": false
+    },
+    "video_share_count": {
+      "auc": 0.50096,
+      "ci_low": 0.50011,
+      "ci_high": 0.50252,
+      "beats_noise": false,
+      "permutation_drop": -0.000312,
+      "permutation_std": 0.000273,
+      "matters_in_combination": false
+    },
+    "video_trending_score": {
+      "auc": 0.50012,
+      "ci_low": 0.50002,
+      "ci_high": 0.502,
+      "beats_noise": false,
+      "permutation_drop": -4.9e-05,
+      "permutation_std": 0.000204,
+      "matters_in_combination": false
+    },
+    "video_has_music": {
+      "auc": 0.50108,
+      "ci_low": 0.50007,
+      "ci_high": 0.50211,
+      "beats_noise": false,
+      "permutation_drop": 2e-05,
+      "permutation_std": 0.000104,
+      "matters_in_combination": false
+    },
+    "video_has_text_overlay": {
+      "auc": 0.50104,
+      "ci_low": 0.50004,
+      "ci_high": 0.5025,
+      "beats_noise": false,
+      "permutation_drop": -0.000314,
+      "permutation_std": 9.2e-05,
+      "matters_in_combination": false
+    },
+    "video_has_effects": {
+      "auc": 0.50055,
+      "ci_low": 0.50003,
+      "ci_high": 0.50188,
+      "beats_noise": false,
+      "permutation_drop": 0.000119,
+      "permutation_std": 5e-05,
+      "matters_in_combination": false
+    },
+    "video_days_since_upload": {
+      "auc": 0.50058,
+      "ci_low": 0.50006,
+      "ci_high": 0.50247,
+      "beats_noise": false,
+      "permutation_drop": -0.000167,
+      "permutation_std": 0.000136,
+      "matters_in_combination": false
+    }
+  },
+  "kept": [
+    "watch_time_seconds",
+    "watch_ratio"
+  ],
+  "full_model_auc": 0.5739,
+  "pruned_model_auc": 0.572097
+}

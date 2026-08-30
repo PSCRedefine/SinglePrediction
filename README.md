@@ -270,12 +270,13 @@ that — which is worth knowing before promising more.
 | `data/interactions.csv` | 500,000 | View log with timestamps, sessions and outcomes |
 | `data/users.csv` | 25,000 | User profiles |
 | `data/videos.csv` | 35,000 | Video metadata |
-| `data/processed_interactions.csv` | 500,000 | **Generated** feature table — the only input `train.py` reads |
+| `data/processed_interactions.csv.gz` | 500,000 | **Committed** feature table — the only input `train.py` reads |
 
 > **Data preview:** [docs/DATA_PREVIEW.md](docs/DATA_PREVIEW.md) — schema, first rows,
 > distributions and null counts for the generated table, plus a 20-row
 > [sample CSV](docs/processed_interactions_sample.csv) you can open directly. The full
-> file is gitignored; rebuild it with `python -m single_prediction.prepare_data`.
+> processed table is committed as `data/processed_interactions.csv.gz` (12 MB), so
+> training reproduces from a clean clone; only the 139 MB raw log is excluded.
 
 **Label.** `target_engaged = liked OR shared OR commented OR followed_creator OR
 replayed`. Positive rate **27.79%**.
@@ -292,7 +293,9 @@ one that matches production and will show drift the day it appears, but the
 honest report is that it changed nothing here.
 
 `interactions.csv` is 139 MB, above GitHub's 100 MB single-file limit, and is
-excluded by `.gitignore`. It must be supplied locally.
+excluded by `.gitignore`. It is only needed to re-run `prepare_data.py` and
+`feature_selection.py`; everything from `train.py` onwards runs from the
+committed `.gz`, and the trained model, metadata and reports are committed too.
 
 ---
 
@@ -352,14 +355,26 @@ python -m pip install -r requirements-dev.txt
 python -m pip install -e .
 ```
 
-Place `interactions.csv`, `users.csv` and `videos.csv` in `data/`, then:
+Everything below runs from a clean clone — the processed dataset
+(`data/processed_interactions.csv.gz`), the trained model and the reports are
+committed:
+
+```bash
+python -m single_prediction.train --input data/processed_interactions.csv.gz
+                                             # ~1 min, retrains and rewrites models/ reports/
+pytest -q                                    # 43 passed
+python monitoring/check_drift.py --self-test
+```
+
+CI runs the same retrain on every push (the `smoke-train` job), so the committed
+data and the training code are checked against each other continuously.
+
+Only the two data-preparation steps need the raw 139 MB `interactions.csv`
+(plus `users.csv` / `videos.csv`), which the repository cannot carry:
 
 ```bash
 python scripts/feature_selection.py          # ~4 min, writes the evidence
-python -m single_prediction.prepare_data     # ~1 min
-python -m single_prediction.train            # ~1 min, writes models/ reports/ image/
-pytest -q                                    # 43 passed
-python monitoring/check_drift.py --self-test
+python -m single_prediction.prepare_data     # ~1 min, rebuilds the processed table
 ```
 
 Services, in two terminals:
@@ -403,9 +418,9 @@ development machine, and the document says so.
 
 | # | Step | Expected |
 |---|---|---|
-| 1 | `python -m single_prediction.prepare_data` | 500,000 rows, positive rate 27.79% |
-| 2 | `python scripts/feature_selection.py` | keeps 2 of 25; pruned and full within ±0.002 |
-| 3 | `python -m single_prediction.train` | four candidates reported tied; winner logistic regression; 6 figures |
+| 1 | `python -m single_prediction.prepare_data` † | 500,000 rows, positive rate 27.79% |
+| 2 | `python scripts/feature_selection.py` † | keeps 2 of 25; pruned and full within ±0.002 |
+| 3 | `python -m single_prediction.train --input data/processed_interactions.csv.gz` | four candidates reported tied; winner logistic regression; 6 figures |
 | 4 | `pytest -q` | 43 passed |
 | 5 | `GET /health` | `status: healthy`, 25,000 users and 35,000 videos indexed |
 | 6 | `POST /predict` valid | probability in [0, 1] with confidence and threshold |
@@ -414,6 +429,10 @@ development machine, and the document says so.
 | 9 | Boundaries: `watch_time` 0 and 3600, `hour_of_day` 0 and 23 | 200 |
 | 10 | Move the model file, restart | `/health` reports `not_ready` with the cause; `/predict` returns 503 |
 | 11 | `python monitoring/check_drift.py --self-test` | quiet traffic stays quiet, shifted traffic alerts |
+| 12 | `python scripts/load_test.py` (API running) | p50/p99 latency and throughput per concurrency level; see [docs/PRODUCTION_READINESS.md](docs/PRODUCTION_READINESS.md) for measured numbers |
+
+† needs the raw 139 MB `interactions.csv`, which the repository cannot carry.
+Steps 3–12 run from a clean clone.
 
 ---
 
