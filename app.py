@@ -21,7 +21,7 @@ CLIENT_ERROR = "__client_error__"
 USER_ID_PATTERN = re.compile(r"user_[A-Za-z0-9_-]+")
 VIDEO_ID_PATTERN = re.compile(r"video_[A-Za-z0-9_-]+")
 
-st.set_page_config(page_title="Cognitive Shorts", page_icon="📱", layout="wide")
+st.set_page_config(page_title="RankShift Serving", page_icon="🎯", layout="wide")
 
 
 def failed(response: dict[str, Any]) -> str | None:
@@ -77,7 +77,7 @@ def validate_inputs(user_id: str, video_id: str) -> list[str]:
     return problems
 
 
-st.title("📱 Cognitive Shorts Recommendation System")
+st.title("🎯 RankShift Serving")
 st.caption("Predict the probability that a user actively engages with a video")
 
 # A shareable demo link. `?demo=1` fills a valid request and predicts it;

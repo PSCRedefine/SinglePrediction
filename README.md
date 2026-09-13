@@ -1,4 +1,4 @@
-# Cognitive Shorts Recommendation System
+# RankShift Serving — Single Prediction
 
 [![tests](https://github.com/PSCRedefine/SinglePrediction/actions/workflows/tests.yml/badge.svg)](https://github.com/PSCRedefine/SinglePrediction/actions/workflows/tests.yml)
 

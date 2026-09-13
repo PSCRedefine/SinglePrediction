@@ -128,7 +128,7 @@ def create_app(
     videos_path: Path = VIDEOS_PATH,
 ) -> FastAPI:
     app = FastAPI(
-        title="Cognitive Shorts Prediction API",
+        title="RankShift Serving — Prediction API",
         version=__version__,
         description=(
             "Single-interaction engagement prediction.\n\n"
