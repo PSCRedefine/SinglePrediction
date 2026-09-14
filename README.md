@@ -1,6 +1,6 @@
 # RankShift Serving — Single Prediction
 
-[![tests](https://github.com/PSCRedefine/SinglePrediction/actions/workflows/tests.yml/badge.svg)](https://github.com/PSCRedefine/SinglePrediction/actions/workflows/tests.yml)
+[![tests](https://github.com/PSCRedefine/SinglePrediction/actions/workflows/tests.yml/badge.svg)](https://github.com/PSCRedefine/SinglePrediction/actions/workflows/tests.yml) [![live demo](https://img.shields.io/badge/live%20demo-rankshift--nine.vercel.app-8b7bff?logo=vercel&logoColor=white)](https://rankshift-nine.vercel.app/serving/single/)
 
 **The problem.** A short-video platform logs every user-video interaction —
 views, likes, comments, shares, follows, replays. That log is a record of what
